@@ -1,0 +1,534 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+}
+
+enum CompetitionType {
+  LEAGUE
+  CUP
+}
+
+enum CupModel {
+  SEMIFINALS
+  SIX_TEAMS
+  QUARTERFINALS
+  ROUND_OF_16
+}
+
+enum CompetitionStatus {
+  DRAFT
+  ACTIVE
+  FINISHED
+}
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  FINISHED
+  CANCELLED
+}
+
+enum MatchStage {
+  LEAGUE
+  ROUND_OF_16
+  QUARTERFINAL
+  SEMIFINAL
+  FINAL
+  THIRD_PLACE
+}
+
+enum MatchLeg {
+  SINGLE
+  FIRST_LEG
+  SECOND_LEG
+}
+
+enum TransferType {
+  TEAM_SWAP
+  FREE_AGENT
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(ADMIN)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Team {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  nameKey      String   @unique
+  shortName    String?
+  primaryColor String?
+  badgeUrl     String?
+  leagueId     String
+  ownerPlayerId String? @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  league           Competition @relation("LeagueTeams", fields: [leagueId], references: [id], onDelete: Cascade)
+  ownerPlayer      Player?     @relation("TeamOwner", fields: [ownerPlayerId], references: [id], onDelete: SetNull)
+  players          Player[]
+  competitions     CompetitionTeam[]
+  homeMatches      Match[]           @relation("HomeTeamMatches")
+  awayMatches      Match[]           @relation("AwayTeamMatches")
+  wonMatches       Match[]           @relation("WinnerTeamMatches")
+  goals            Goal[]
+  assists          Assist[]
+  standings        Standing[]
+  transfersIn      Transfer[]        @relation("TransferTargetTeam")
+  transfersOut     Transfer[]        @relation("TransferSourceTeam")
+  scoreboardEntries LiveScoreboardEntry[]
+  seasonRankings    TeamSeasonRanking[]
+  finalizationsAsChampion TournamentFinalization[] @relation("ChampionFinalizations")
+  finalizationsAsRunnerUp TournamentFinalization[] @relation("RunnerUpFinalizations")
+  cupMatchesAsHome CupBracketMatch[] @relation("CupBracketHomeTeam")
+  cupMatchesAsAway CupBracketMatch[] @relation("CupBracketAwayTeam")
+
+  @@index([leagueId])
+  @@map("teams")
+}
+
+model Player {
+  id        String   @id @default(cuid())
+  name      String
+  nameKey   String   @unique
+  position  String?
+  country   String?
+  number    Int?
+  teamId    String?
+  leagueId  String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team                  Team?       @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  league                Competition? @relation("LeaguePlayers", fields: [leagueId], references: [id], onDelete: SetNull)
+  ownedTeam             Team?       @relation("TeamOwner")
+  goals                 Goal[]
+  assists               Assist[]
+  competitionStats      PlayerCompetitionStat[]
+  seasonStats           PlayerSeasonStat[]
+  titleRankings         PlayerTournamentTitle[]
+  tournamentAwards      TournamentFinalizationBestPlayer[]
+  transferTargets       Transfer[]  @relation("TransferTargetPlayer")
+  transferReplacements  Transfer[]  @relation("TransferReplacementPlayer")
+  transferReleased      Transfer[]  @relation("TransferReleasedPlayer")
+
+  @@index([teamId])
+  @@index([leagueId])
+  @@map("players")
+}
+
+model PlayerPosition {
+  id        String   @id @default(cuid())
+  name      String
+  nameKey   String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("player_positions")
+}
+
+model Country {
+  id        String   @id @default(cuid())
+  name      String
+  nameKey   String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("countries")
+}
+
+model Competition {
+  id        String            @id @default(cuid())
+  name      String
+  registrationNameKey String? @unique
+  season    String?
+  type      CompetitionType
+  cupModel  CupModel?
+  isOrganizer Boolean           @default(false)
+  status    CompetitionStatus @default(DRAFT)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  teams     CompetitionTeam[]
+  leagueTeams Team[] @relation("LeagueTeams")
+  leaguePlayers Player[] @relation("LeaguePlayers")
+  matches   Match[]
+  standings Standing[]
+  scoreboardEntries LiveScoreboardEntry[]
+  playerStats PlayerCompetitionStat[]
+  finalizations TournamentFinalization[]
+
+  @@index([type])
+  @@index([status])
+  @@map("competitions")
+}
+
+model CompetitionTeam {
+  id            String @id @default(cuid())
+  competitionId String
+  teamId        String
+  seed          Int?
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([competitionId, teamId])
+  @@index([teamId])
+  @@map("competition_teams")
+}
+
+model Match {
+  id               String      @id @default(cuid())
+  competitionId    String
+  stage            MatchStage
+  leg              MatchLeg    @default(SINGLE)
+  matchNumber      Int?
+  aggregateGroupId String?
+  homeTeamId       String
+  awayTeamId       String
+  winnerTeamId     String?
+  homeScore        Int?
+  awayScore        Int?
+  extraHomeScore   Int?
+  extraAwayScore   Int?
+  status           MatchStatus @default(SCHEDULED)
+  playedAt         DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  homeTeam    Team        @relation("HomeTeamMatches", fields: [homeTeamId], references: [id])
+  awayTeam    Team        @relation("AwayTeamMatches", fields: [awayTeamId], references: [id])
+  winnerTeam  Team?       @relation("WinnerTeamMatches", fields: [winnerTeamId], references: [id])
+  goals       Goal[]
+  assists     Assist[]
+
+  @@index([competitionId])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+  @@index([winnerTeamId])
+  @@index([aggregateGroupId])
+  @@map("matches")
+}
+
+model Goal {
+  id        String   @id @default(cuid())
+  matchId   String
+  playerId  String
+  teamId    String
+  minute    Int?
+  ownGoal   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  match   Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  team    Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  assists Assist[]
+
+  @@index([matchId])
+  @@index([playerId])
+  @@index([teamId])
+  @@map("goals")
+}
+
+model Assist {
+  id        String   @id @default(cuid())
+  matchId   String
+  playerId  String
+  teamId    String
+  goalId    String?
+  createdAt DateTime @default(now())
+
+  match  Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  goal   Goal?  @relation(fields: [goalId], references: [id], onDelete: SetNull)
+
+  @@unique([goalId])
+  @@index([matchId])
+  @@index([playerId])
+  @@index([teamId])
+  @@map("assists")
+}
+
+model LiveScoreboardEntry {
+  id            String   @id @default(cuid())
+  competitionId String
+  teamId        String
+  goals         Int      @default(0)
+  updatedAt     DateTime @updatedAt
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([competitionId, teamId])
+  @@index([teamId])
+  @@map("live_scoreboard_entries")
+}
+
+model PlayerCompetitionStat {
+  id            String   @id @default(cuid())
+  competitionId String
+  playerId      String
+  goals         Int      @default(0)
+  assists       Int      @default(0)
+  updatedAt     DateTime @updatedAt
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([competitionId, playerId])
+  @@index([playerId])
+  @@map("player_competition_stats")
+}
+
+model PlayerSeasonStat {
+  id        String   @id @default(cuid())
+  season    String
+  playerId  String
+  goals     Int      @default(0)
+  assists   Int      @default(0)
+  points    Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([season, playerId])
+  @@index([playerId])
+  @@map("player_season_stats")
+}
+
+model TeamSeasonRanking {
+  id        String   @id @default(cuid())
+  season    String
+  teamId    String
+  points    Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([season, teamId])
+  @@index([teamId])
+  @@map("team_season_rankings")
+}
+
+model TeamTournamentPointRule {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  firstPlacePoints  Int
+  secondPlacePoints Int
+  thirdPlacePoints  Int
+  fourthPlacePoints Int      @default(0)
+  fifthPlacePoints  Int      @default(0)
+  sixthPlacePoints  Int      @default(0)
+  seventhPlacePoints Int     @default(0)
+  eighthPlacePoints Int      @default(0)
+  ninthPlacePoints  Int      @default(0)
+  tenthPlacePoints  Int      @default(0)
+  eleventhPlacePoints Int    @default(0)
+  twelfthPlacePoints Int     @default(0)
+  thirteenthPlacePoints Int  @default(0)
+  fourteenthPlacePoints Int  @default(0)
+  fifteenthPlacePoints Int   @default(0)
+  sixteenthPlacePoints Int   @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("team_tournament_point_rules")
+}
+
+model PlayerAwardPointRule {
+  id                String   @id @default(cuid())
+  firstPlacePoints  Int
+  secondPlacePoints Int
+  thirdPlacePoints  Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("player_award_point_rules")
+}
+
+model TournamentTitleType {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  playerTitles  PlayerTournamentTitle[]
+  finalizations TournamentFinalization[]
+
+  @@map("tournament_title_types")
+}
+
+model PlayerTournamentTitle {
+  id          String   @id @default(cuid())
+  season      String
+  playerId    String
+  titleTypeId String
+  titles      Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  player    Player              @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  titleType TournamentTitleType @relation(fields: [titleTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([season, playerId, titleTypeId])
+  @@index([playerId])
+  @@index([titleTypeId])
+  @@map("player_tournament_titles")
+}
+
+model TournamentFinalization {
+  id              String   @id @default(cuid())
+  competitionId   String
+  season          String
+  tournamentName  String
+  titleTypeId     String
+  championTeamId  String
+  runnerUpTeamId  String?
+  thirdTeamId     String?
+  createdAt       DateTime @default(now())
+
+  competition  Competition         @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  titleType    TournamentTitleType @relation(fields: [titleTypeId], references: [id], onDelete: Cascade)
+  championTeam Team                @relation("ChampionFinalizations", fields: [championTeamId], references: [id], onDelete: Cascade)
+  runnerUpTeam Team?               @relation("RunnerUpFinalizations", fields: [runnerUpTeamId], references: [id], onDelete: SetNull)
+  bestPlayers  TournamentFinalizationBestPlayer[]
+
+  @@index([competitionId])
+  @@index([season])
+  @@index([titleTypeId])
+  @@index([championTeamId])
+  @@map("tournament_finalizations")
+}
+
+model TournamentFinalizationBestPlayer {
+  id             String @id @default(cuid())
+  finalizationId String
+  playerId       String
+  position       Int
+
+  finalization TournamentFinalization @relation(fields: [finalizationId], references: [id], onDelete: Cascade)
+  player       Player                 @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([finalizationId, position])
+  @@unique([finalizationId, playerId])
+  @@index([playerId])
+  @@map("tournament_finalization_best_players")
+}
+
+model CupBracket {
+  id             String   @id @default(cuid())
+  tournamentName String
+  model          String   @unique
+  byeTeamIds     Json?
+  finalSeason        String?
+  finalTitleTypeId   String?
+  finalTeamRuleId    String?
+  championTeamId     String?
+  runnerUpTeamId     String?
+  thirdTeamId        String?
+  placementTeamIds   Json?
+  bestPlayerIds      Json?
+  finalizedAt        DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  matches CupBracketMatch[]
+
+  @@map("cup_brackets")
+}
+
+model CupBracketMatch {
+  id              String   @id @default(cuid())
+  bracketId       String
+  phase           String
+  order           Int
+  homeTeamId      String
+  awayTeamId      String
+  firstHomeScore  Int?
+  firstAwayScore  Int?
+  secondHomeScore Int?
+  secondAwayScore Int?
+  extraHomeScore  Int?
+  extraAwayScore  Int?
+  scoreSavedAt    DateTime?
+  firstScoreSavedAt  DateTime?
+  secondScoreSavedAt DateTime?
+  extraScoreSavedAt  DateTime?
+  updatedAt       DateTime @updatedAt
+
+  bracket  CupBracket @relation(fields: [bracketId], references: [id], onDelete: Cascade)
+  homeTeam Team       @relation("CupBracketHomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam Team       @relation("CupBracketAwayTeam", fields: [awayTeamId], references: [id])
+
+  @@unique([bracketId, phase, order])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+  @@map("cup_bracket_matches")
+}
+
+model Standing {
+  id            String   @id @default(cuid())
+  competitionId String
+  teamId        String
+  played        Int      @default(0)
+  wins          Int      @default(0)
+  losses        Int      @default(0)
+  goalsFor      Int      @default(0)
+  goalsAgainst  Int      @default(0)
+  goalBalance   Int      @default(0)
+  points        Int      @default(0)
+  updatedAt     DateTime @updatedAt
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([competitionId, teamId])
+  @@index([teamId])
+  @@map("standings")
+}
+
+model Transfer {
+  id                   String       @id @default(cuid())
+  type                 TransferType
+  targetTeamId         String
+  targetPlayerId       String
+  replacementPlayerId  String
+  sourceTeamId         String?
+  releasedPlayerId     String?
+  nextOwnerPlayerId    String?
+  previousTargetTeamId String?
+  previousTargetLeagueId String?
+  notes                String?
+  createdAt            DateTime     @default(now())
+
+  targetTeam         Team   @relation("TransferTargetTeam", fields: [targetTeamId], references: [id])
+  sourceTeam         Team?  @relation("TransferSourceTeam", fields: [sourceTeamId], references: [id])
+  targetPlayer       Player @relation("TransferTargetPlayer", fields: [targetPlayerId], references: [id])
+  replacementPlayer  Player @relation("TransferReplacementPlayer", fields: [replacementPlayerId], references: [id])
+  releasedPlayer     Player? @relation("TransferReleasedPlayer", fields: [releasedPlayerId], references: [id])
+
+  @@index([targetTeamId])
+  @@index([sourceTeamId])
+  @@index([targetPlayerId])
+  @@index([replacementPlayerId])
+  @@map("transfers")
+}

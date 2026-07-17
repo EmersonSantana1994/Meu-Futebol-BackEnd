@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+.my-fut-api-dev.*.log
+npm-debug.log*
+
+/src/generated/prisma

@@ -1,0 +1,9 @@
+ALTER TABLE `cup_brackets`
+  ADD COLUMN `finalSeason` VARCHAR(191) NULL,
+  ADD COLUMN `finalTitleTypeId` VARCHAR(191) NULL,
+  ADD COLUMN `finalTeamRuleId` VARCHAR(191) NULL,
+  ADD COLUMN `championTeamId` VARCHAR(191) NULL,
+  ADD COLUMN `runnerUpTeamId` VARCHAR(191) NULL,
+  ADD COLUMN `thirdTeamId` VARCHAR(191) NULL,
+  ADD COLUMN `bestPlayerIds` JSON NULL,
+  ADD COLUMN `finalizedAt` DATETIME(3) NULL;
