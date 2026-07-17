@@ -1,4 +1,4 @@
-# Guia para rodar o My Fut em outro PC
+# Guia para rodar o Meu futebol em outro PC
 
 Este passo a passo serve para quando voce clonar o projeto do Git e quiser subir o sistema em uma maquina nova.
 

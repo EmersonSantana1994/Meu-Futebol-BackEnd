@@ -1,12 +1,12 @@
-# Documentacao do Sistema My Fut
+# Documentacao do Sistema Meu futebol
 
 Ultima atualizacao: 13/07/2026
 
-Este documento descreve as regras, telas, endpoints e pontos de verificacao do novo sistema My Fut. A ideia e servir como checklist para validar se o sistema esta respeitando as regras do projeto antigo e as novas regras combinadas.
+Este documento descreve as regras, telas, endpoints e pontos de verificacao do novo sistema Meu futebol. A ideia e servir como checklist para validar se o sistema esta respeitando as regras do projeto antigo e as novas regras combinadas.
 
 ## 1. Visao Geral
 
-O My Fut e um sistema para organizar ligas, copas, rankings de times, rankings de jogadores, artilharia, assistencias, placar eletronico, transferencias e titulos de torneios.
+O Meu futebol e um sistema para organizar ligas, copas, rankings de times, rankings de jogadores, artilharia, assistencias, placar eletronico, transferencias e titulos de torneios.
 
 O projeto novo esta dividido em:
 
