@@ -7,11 +7,6 @@ datasource db {
   provider = "mysql"
 }
 
-enum UserRole {
-  ADMIN
-  MANAGER
-}
-
 enum CompetitionType {
   LEAGUE
   CUP
@@ -55,18 +50,6 @@ enum MatchLeg {
 enum TransferType {
   TEAM_SWAP
   FREE_AGENT
-}
-
-model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
-  passwordHash String
-  role         UserRole @default(ADMIN)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@map("users")
 }
 
 model Team {
