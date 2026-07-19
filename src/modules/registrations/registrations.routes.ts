@@ -27,6 +27,13 @@ const createPlayerSchema = z.object({
   isOwner: z.boolean().optional()
 });
 
+const updatePlayerSchema = createPlayerSchema.pick({
+  name: true,
+  position: true,
+  country: true,
+  number: true
+});
+
 const catalogSchema = z.object({
   name: z.string().trim().min(1)
 });
@@ -70,17 +77,18 @@ async function assertUniqueName(
   entity: "league" | "team" | "player",
   name: string
 ) {
-  const records =
+  const nameKey = normalizedName(name);
+  const existing =
     entity === "league"
-      ? await prisma.competition.findMany({
-          where: { type: "LEAGUE", isOrganizer: true },
-          select: { name: true }
+      ? await prisma.competition.findFirst({
+          where: { type: "LEAGUE", isOrganizer: true, registrationNameKey: nameKey },
+          select: { id: true }
         })
       : entity === "team"
-        ? await prisma.team.findMany({ select: { name: true } })
-        : await prisma.player.findMany({ select: { name: true } });
+        ? await prisma.team.findUnique({ where: { nameKey }, select: { id: true } })
+        : await prisma.player.findUnique({ where: { nameKey }, select: { id: true } });
 
-  if (records.some((record) => normalizedName(record.name) === normalizedName(name))) {
+  if (existing) {
     const labels = {
       league: "uma liga",
       team: "um time",
@@ -410,6 +418,81 @@ router.post("/players", async (req, res, next) => {
     }
 
     res.status(201).json(player);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch("/players/:playerId", async (req, res, next) => {
+  try {
+    const playerId = z.string().trim().min(1).parse(req.params.playerId);
+    const data = updatePlayerSchema.parse(req.body);
+    const currentPlayer = await prisma.player.findUnique({ where: { id: playerId } });
+    if (!currentPlayer) throw new Error("Jogador nao encontrado.");
+
+    const nameKey = normalizedName(data.name);
+    const playerWithSameName = await prisma.player.findUnique({ where: { nameKey } });
+    if (playerWithSameName && playerWithSameName.id !== playerId) {
+      throw new Error("Ja existe um jogador com esse nome.");
+    }
+
+    const [position, country] = await Promise.all([
+      findCatalogEntry("position", data.position),
+      findCatalogEntry("country", data.country)
+    ]);
+    if (!position) throw new Error("Selecione uma posicao cadastrada no sistema.");
+    if (!country) throw new Error("Selecione um pais cadastrado no sistema.");
+
+    const player = await prisma.player.update({
+      where: { id: playerId },
+      data: {
+        name: cleanName(data.name),
+        nameKey,
+        position: position.name,
+        country: country.name,
+        number: data.number ?? null
+      },
+      include: { team: true, league: true }
+    });
+
+    res.json(player);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete("/players/:playerId", async (req, res, next) => {
+  try {
+    const playerId = z.string().trim().min(1).parse(req.params.playerId);
+    const player = await prisma.player.findUnique({ where: { id: playerId } });
+    if (!player) throw new Error("Jogador nao encontrado.");
+
+    const historyCounts = await Promise.all([
+      prisma.goal.count({ where: { playerId } }),
+      prisma.assist.count({ where: { playerId } }),
+      prisma.playerCompetitionStat.count({ where: { playerId } }),
+      prisma.playerSeasonStat.count({ where: { playerId } }),
+      prisma.playerTournamentTitle.count({ where: { playerId } }),
+      prisma.tournamentFinalizationBestPlayer.count({ where: { playerId } }),
+      prisma.transfer.count({
+        where: {
+          OR: [
+            { targetPlayerId: playerId },
+            { replacementPlayerId: playerId },
+            { releasedPlayerId: playerId }
+          ]
+        }
+      })
+    ]);
+
+    if (historyCounts.some((count) => count > 0)) {
+      throw new Error(
+        "Este jogador possui gols, assistencias, rankings, titulos ou transferencias e nao pode ser excluido."
+      );
+    }
+
+    await prisma.player.delete({ where: { id: playerId } });
+    res.json({ ok: true });
   } catch (error) {
     next(error);
   }
